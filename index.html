@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#21382C">
+<title>Centro de Gestión · Villas de Colombia</title>
+<style>
+:root{
+  --cream:#FAF7F1;--sand:#F0E9DD;--ink:#22302A;--soft:#6A766F;--line:#E5DDCF;
+  --green:#2F4B3C;--green-d:#21382C;--gold:#B9854A;--white:#fff;
+  --guaca:#B9854A;--esme:#2F4B3C;
+  --ab:#FF5A5F;--bk:#1A4FA0;--ig:#C13584;--wa:#25D366;--web:#6A766F;
+  --ok:#2E7D52;--warn:#C9892F;--bad:#B5483C;
+  --r:14px;--safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{font-family:var(--font);background:var(--cream);color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;line-height:1.45}
+img{display:block;max-width:100%}
+button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:1rem}
+.app{max-width:920px;margin:0 auto;min-height:100vh}
+.hidden{display:none!important}
+
+/* ===== Login ===== */
+.auth{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;text-align:center;gap:8px;background:linear-gradient(165deg,var(--green) 0%,var(--green-d) 100%);color:#fff}
+.auth .logo{width:62px;height:62px;border-radius:18px;background:rgba(255,255,255,.12);display:grid;place-items:center;margin-bottom:14px}
+.auth h1{font-size:1.5rem;font-weight:600;letter-spacing:-.01em}
+.auth p{opacity:.8;font-size:.92rem;max-width:30ch;margin-bottom:18px}
+.auth form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:12px}
+.auth input{padding:15px 16px;border-radius:13px;border:0;background:rgba(255,255,255,.95);color:var(--ink)}
+.auth .btn{background:var(--gold);color:#fff;font-weight:600;padding:15px;border-radius:13px;min-height:50px}
+.auth .msg{font-size:.86rem;min-height:20px;opacity:.95}
+.auth .foot{margin-top:18px;font-size:.76rem;opacity:.6}
+
+/* Top bar */
+.topbar{position:sticky;top:0;z-index:30;background:var(--green-d);color:#fff;padding:calc(10px + var(--safe-t)) 16px 10px;display:flex;align-items:center;gap:12px}
+.topbar .back{display:none;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.12);align-items:center;justify-content:center;flex:none}
+.topbar.sub .back{display:flex}
+.topbar h1{font-size:1.06rem;font-weight:600;letter-spacing:-.01em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .ava{width:34px;height:34px;border-radius:50%;background:var(--gold);display:grid;place-items:center;font-weight:700;font-size:.82rem;flex:none}
+.villa-filter{display:flex;gap:6px;padding:10px 16px;background:var(--green-d);overflow-x:auto;scrollbar-width:none}
+.villa-filter::-webkit-scrollbar{display:none}
+.vchip{flex:none;font-size:.8rem;font-weight:600;color:#fff;background:rgba(255,255,255,.12);padding:7px 14px;border-radius:99px;white-space:nowrap;transition:.15s}
+.vchip.on{background:#fff;color:var(--green-d)}
+
+.view{padding:16px 16px 96px;display:none;animation:fade .25s}
+.view.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.sec-t{font-size:.74rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);margin:22px 2px 10px}
+.sec-t:first-child{margin-top:4px}
+.muted{color:var(--soft);font-size:.86rem}
+.empty{text-align:center;padding:30px 16px;color:var(--soft)}
+.empty b{display:block;color:var(--ink);font-size:1rem;margin-bottom:4px}
+
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.kpi .lab{font-size:.74rem;color:var(--soft);font-weight:600}
+.kpi .val{font-size:1.5rem;font-weight:700;letter-spacing:-.02em;margin-top:6px}
+.kpi .delta{font-size:.72rem;font-weight:600;margin-top:3px}
+.up{color:var(--ok)}.down{color:var(--bad)}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.spread{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pnl-bar{height:12px;border-radius:8px;background:var(--sand);overflow:hidden;display:flex;margin:10px 0 4px}
+.pnl-bar i{display:block;height:100%}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.76rem;color:var(--soft);margin-top:8px}
+.legend span{display:flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:3px;flex:none}
+.li{display:flex;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}
+.li:last-child{border-bottom:0}
+.li .ava2{width:40px;height:40px;border-radius:11px;flex:none;display:grid;place-items:center;font-weight:700;color:#fff;font-size:.82rem}
+.li .main{flex:1;min-width:0}
+.li .main b{font-size:.92rem;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .main small{font-size:.78rem;color:var(--soft);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .end{text-align:right;flex:none}
+.li .end b{font-size:.9rem}
+.li .end small{font-size:.72rem;color:var(--soft);display:block}
+.badge{font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:99px;white-space:nowrap;display:inline-block}
+.b-nuevo{background:#E7F0FF;color:#1A4FA0}.b-contactado{background:#FFF3DC;color:#9A6712}
+.b-cotizado{background:#EFE7FB;color:#6A3FB0}.b-reservado{background:#E1F3E8;color:#1F7A4D}
+.b-perdido{background:#F2E6E4;color:#9A4A3E}.b-confirmada{background:#E1F3E8;color:#1F7A4D}
+.b-cotizacion{background:#EFE7FB;color:#6A3FB0}.b-en_curso{background:#E7F0FF;color:#1A4FA0}
+.b-finalizada{background:#EFEDE6;color:#6A766F}.b-cancelada{background:#F2E6E4;color:#9A4A3E}
+.chan{font-size:.62rem;font-weight:800;color:#fff;width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;font-size:.8rem;font-weight:600;padding:7px 13px;border-radius:99px;background:#fff;border:1px solid var(--line);color:var(--soft);white-space:nowrap}
+.chip.on{background:var(--green);color:#fff;border-color:var(--green)}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cal-head button{width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid var(--line);font-size:1.1rem}
+.cal-head .m{font-weight:600;text-transform:capitalize}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-grid .dow{text-align:center;font-size:.66rem;font-weight:700;color:var(--soft);padding:4px 0}
+.cell{aspect-ratio:1;background:#fff;border:1px solid var(--line);border-radius:9px;padding:4px;font-size:.74rem;position:relative;overflow:hidden}
+.cell.out{background:transparent;border:0}
+.cell .d{font-weight:600}
+.cell .bk{position:absolute;left:3px;right:3px;height:5px;border-radius:3px}
+.ftab{width:100%;font-size:.86rem;border-collapse:collapse}
+.ftab td{padding:9px 0;border-bottom:1px solid var(--line)}
+.ftab td:last-child{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.ftab tr.tot td{border-top:2px solid var(--ink);border-bottom:0;font-weight:700;padding-top:11px}
+.ftab .cat{color:var(--soft)}
+.pos{color:var(--ok)}.neg{color:var(--bad)}
+.bars{display:flex;flex-direction:column;gap:11px;margin-top:6px}
+.barrow{display:grid;grid-template-columns:96px 1fr 52px;align-items:center;gap:10px;font-size:.82rem}
+.barrow .track{height:9px;background:var(--sand);border-radius:6px;overflow:hidden}
+.barrow .track i{display:block;height:100%;background:var(--green);border-radius:6px}
+.barrow .v{text-align:right;font-weight:600;color:var(--soft);font-variant-numeric:tabular-nums}
+.donut-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--green);color:#fff;font-weight:600;font-size:.9rem;padding:13px 18px;border-radius:12px;min-height:48px;width:100%}
+.btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.split2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.menu-li{display:flex;align-items:center;gap:14px;padding:15px 4px;border-bottom:1px solid var(--line);font-size:.95rem;font-weight:500;width:100%;text-align:left}
+.menu-li svg{width:22px;height:22px;color:var(--green)}
+.menu-li .chev{margin-left:auto;color:var(--soft)}
+
+.fab{position:fixed;right:max(16px,calc(50% - 460px + 16px));bottom:calc(80px + var(--safe-b));width:54px;height:54px;border-radius:17px;background:var(--green);color:#fff;display:grid;place-items:center;box-shadow:0 8px 24px rgba(33,56,44,.35);z-index:25}
+.fab svg{width:26px;height:26px}
+.bnav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,255,255,.96);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex;padding-bottom:var(--safe-b)}
+.bnav button{flex:1;padding:9px 0 8px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--soft);font-size:.64rem;font-weight:600}
+.bnav button svg{width:23px;height:23px}
+.bnav button.on{color:var(--green)}
+
+/* Modal sheet */
+.sheet-bg{position:fixed;inset:0;background:rgba(20,28,24,.45);z-index:60;display:none;align-items:flex-end;justify-content:center}
+.sheet-bg.on{display:flex}
+.sheet{background:var(--cream);width:100%;max-width:920px;border-radius:20px 20px 0 0;padding:18px 18px calc(22px + var(--safe-b));max-height:90vh;overflow:auto;animation:up .25s}
+@keyframes up{from{transform:translateY(30px)}to{transform:none}}
+.sheet h3{font-size:1.1rem;font-weight:600;margin-bottom:14px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:.78rem;font-weight:600;color:var(--soft);margin-bottom:5px}
+.field input,.field select,.field textarea{width:100%;padding:12px 13px;border-radius:11px;border:1px solid var(--line);background:#fff}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(94px + var(--safe-b));background:var(--ink);color:#fff;padding:11px 18px;border-radius:12px;font-size:.86rem;z-index:80;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.on{opacity:1}
+@media(min-width:900px){.kpis{grid-template-columns:repeat(4,1fr)}.view{padding:24px 28px 40px}.bnav{position:sticky;border-radius:0}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<section class="auth" id="authView">
+  <div class="logo"><svg width="34" height="34" viewBox="0 0 32 32" fill="none"><path d="M16 3C9 3 4 9 4 16c0 7 5 13 12 13 3 0 5-1 7-3l-4-4c-1 1-2 1-3 1-4 0-7-3-7-7s3-7 7-7c4 0 7 3 7 7h5c0-7-5-13-12-13z" fill="#fff" opacity=".95"/><circle cx="22" cy="12" r="2.4" fill="#B9854A"/></svg></div>
+  <h1>Centro de Gestión</h1>
+  <p>Villas de Colombia · acceso del equipo</p>
+  <form id="loginForm">
+    <input type="email" id="loginEmail" placeholder="tu correo" autocomplete="email" required>
+    <button class="btn" type="submit" id="loginBtn">Enviar enlace de acceso</button>
+    <div class="msg" id="loginMsg"></div>
+  </form>
+  <div class="foot">Recibirás un enlace mágico por correo. Sin contraseña.</div>
+</section>
+
+<!-- APP -->
+<div class="app hidden" id="appView">
+  <header class="topbar" id="topbar">
+    <button class="back" id="back" aria-label="Atrás"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <h1 id="title">Inicio</h1>
+    <div class="ava" id="ava">··</div>
+  </header>
+  <div class="villa-filter" id="vfilter">
+    <button class="vchip on" data-villa="all">Las 2 villas</button>
+  </div>
+  <main id="main"></main>
+  <button class="fab" id="fab" aria-label="Añadir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg></button>
+  <nav class="bnav" id="bnav">
+    <button data-nav="inicio" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 11l9-8 9 8M5 9.5V21h14V9.5"/></svg>Inicio</button>
+    <button data-nav="bandeja"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 7l9 6 9-6M3 7v10h18V7H3z"/></svg>Solicitudes</button>
+    <button data-nav="calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Calendario</button>
+    <button data-nav="finanzas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 19V5M4 19h16M8 16v-4M12 16V8M16 16v-7"/></svg>Finanzas</button>
+    <button data-nav="mas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>Más</button>
+  </nav>
+</div>
+
+<div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
