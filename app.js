@@ -57,7 +57,7 @@ $("#loginForm").addEventListener("submit", async e=>{
   pendingEmail=email;
   $("#codeForm").classList.remove("hidden");
   $("#loginCode").focus();
-  $("#loginMsg").textContent="✓ Te enviamos un código de 6 dígitos. Escríbelo aquí.";
+  $("#loginMsg").textContent="✓ Te enviamos un código por correo. Escríbelo aquí.";
 });
 $("#codeForm").addEventListener("submit", async e=>{
   e.preventDefault();
