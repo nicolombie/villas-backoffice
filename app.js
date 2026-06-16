@@ -1,5 +1,7 @@
 /* ===== Centro de Gestión · app conectada a Supabase ===== */
-const sb = supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.publishableKey);
+const sb = supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.publishableKey, {
+  auth:{ flowType:"implicit", detectSessionInUrl:true, persistSession:true, autoRefreshToken:true }
+});
 
 const CH = {airbnb:{c:"var(--ab)",t:"AB"},booking:{c:"var(--bk)",t:"BK"},instagram:{c:"var(--ig)",t:"IG"},whatsapp:{c:"var(--wa)",t:"WA"},directo:{c:"var(--web)",t:"W"},otro:{c:"var(--soft)",t:"·"}};
 const ST = {nuevo:"Nuevo",contactado:"Contactado",cotizado:"Cotizado",reservado:"Reservado",perdido:"Perdido"};
@@ -43,14 +45,30 @@ async function afterLogin(session){
   $("#authView").classList.add("hidden"); $("#appView").classList.remove("hidden");
   await loadAll(); render();
 }
+let pendingEmail="";
 $("#loginForm").addEventListener("submit", async e=>{
   e.preventDefault();
   const email=$("#loginEmail").value.trim();
   if(!email) return;
   $("#loginBtn").disabled=true; $("#loginMsg").textContent="Enviando…";
-  const {error}=await sb.auth.signInWithOtp({email, options:{emailRedirectTo:location.href}});
+  const {error}=await sb.auth.signInWithOtp({email, options:{emailRedirectTo:location.href, shouldCreateUser:true}});
   $("#loginBtn").disabled=false;
-  $("#loginMsg").textContent = error ? ("Error: "+error.message) : "✓ Revisa tu correo y abre el enlace para entrar.";
+  if(error){ $("#loginMsg").textContent="Error: "+error.message; return; }
+  pendingEmail=email;
+  $("#codeForm").classList.remove("hidden");
+  $("#loginCode").focus();
+  $("#loginMsg").textContent="✓ Te enviamos un código de 6 dígitos. Escríbelo aquí.";
+});
+$("#codeForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const token=$("#loginCode").value.trim().replace(/\s/g,"");
+  const email=pendingEmail||$("#loginEmail").value.trim();
+  if(!token||!email) return;
+  $("#codeBtn").disabled=true; $("#loginMsg").textContent="Verificando…";
+  const {error}=await sb.auth.verifyOtp({email, token, type:"email"});
+  $("#codeBtn").disabled=false;
+  if(error){ $("#loginMsg").textContent="Código incorrecto o expirado. Pide uno nuevo."; }
+  // si es correcto, onAuthStateChange (SIGNED_IN) muestra la app
 });
 
 /* ---------- DATA ---------- */
