@@ -9,19 +9,21 @@ const RST = {cotizacion:"Cotización",confirmada:"Confirmada",en_curso:"En curso
 const SEG = {familia_paisa:"Familia paisa",grupo_evento:"Grupo/Evento",nomada_digital:"Nómada digital",internacional:"Internacional",corporativo:"Corporativo",otro:"Otro"};
 const TEMP = {semana:"Entre semana",fin_de_semana:"Fin de semana",puente:"Puente festivo",temporada_alta:"Temporada alta"};
 const TPL = {confirmacion:"Confirmación",instrucciones:"Instrucciones de llegada",recordatorio:"Recordatorio check-out",resena:"Pedir reseña",seguimiento:"Seguimiento"};
-const SOCIOS = ["Nicolas","Soizic","Poup's inversiones"];
+const SOCIOS_POR_VILLA = { guacamayas:["Nicolas","Soizic","Poup's inversiones"], esmeralda:["Nicolas","Pauline"] };
 const canalCatName = {airbnb:"Airbnb",booking:"Booking",whatsapp:"WhatsApp",instagram:"Instagram",directo:"Directo"};
 
-let me=null, villa="all", cur="inicio";
+let me=null, villa=null, cur="inicio";
 let D = {villas:[],leads:[],reservas:[],tx:[],contactos:[],tareas:[],categorias:[],pagos:[],plantillas:[],temporadas:[]};
 let leadFilter="todos", crmSeg="Todos";
 
 const cop = n => "$"+Math.round(+n||0).toLocaleString("es-CO");
 const copK = n => {n=+n||0; return Math.abs(n)>=1e6 ? "$"+(n/1e6).toFixed(1).replace(".0","")+"M" : "$"+Math.round(n/1000)+"k";};
 const initials = s => (s||"·").trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
-const fv = arr => villa==="all" ? arr : arr.filter(x=>x.propiedad===villa);
+const fv = arr => arr.filter(x=>x.propiedad===villa);
 const vname = id => (D.villas.find(v=>v.id===id)||{}).nombre || "—";
 const vcolor = id => (D.villas.find(v=>v.id===id)||{}).color || "var(--green)";
+const villaSlug = id => (D.villas.find(v=>v.id===id)||{}).slug || "";
+const currentSocios = () => SOCIOS_POR_VILLA[villaSlug(villa)] || [];
 const villaEnlace = id => {const v=D.villas.find(x=>x.id===id);return v?`https://www.villasdecolombia.com/villa-${v.slug}/`:"";};
 const $ = s => document.querySelector(s);
 const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
@@ -83,24 +85,30 @@ $("#codeForm").addEventListener("submit", async e=>{
 
 /* ---------- DATA ---------- */
 async function loadAll(){
+  const todas = (me?.villas||"all")==="all";
+  const vres = await sb.from("propiedades").select("*").order("nombre");
+  let villas = vres.data||[];
+  if(!todas) villas = villas.filter(v=>v.slug===me.villas);
+  D.villas = villas;
+  const allowed = D.villas.map(v=>v.id);
+  const sc = q => allowed.length ? q.in("propiedad", allowed) : q;
   const r = await Promise.all([
-    sb.from("propiedades").select("*").order("nombre"),
-    sb.from("leads").select("*, cliente:contactos(nombre,telefono)").order("creado",{ascending:false}),
-    sb.from("reservas").select("*, cliente:contactos(nombre,telefono)").order("fecha_in",{ascending:false}),
-    sb.from("transacciones").select("*, categoria:categorias(nombre,tipo)").order("fecha",{ascending:false}),
+    sc(sb.from("leads").select("*, cliente:contactos(nombre,telefono)").order("creado",{ascending:false})),
+    sc(sb.from("reservas").select("*, cliente:contactos(nombre,telefono)").order("fecha_in",{ascending:false})),
+    sc(sb.from("transacciones").select("*, categoria:categorias(nombre,tipo)").order("fecha",{ascending:false})),
     sb.from("contactos").select("*").order("nombre"),
-    sb.from("tareas").select("*").order("vence"),
+    sc(sb.from("tareas").select("*").order("vence")),
     sb.from("categorias").select("*").order("orden"),
     sb.from("pagos").select("*"),
     sb.from("plantillas_mensaje").select("*"),
-    sb.from("temporadas").select("*")
+    sc(sb.from("temporadas").select("*"))
   ]);
-  D.villas=r[0].data||[]; D.leads=r[1].data||[]; D.reservas=r[2].data||[];
-  D.tx=r[3].data||[]; D.contactos=r[4].data||[]; D.tareas=r[5].data||[]; D.categorias=r[6].data||[];
-  D.pagos=r[7].data||[]; D.plantillas=r[8].data||[]; D.temporadas=r[9].data||[];
-  const vf=$("#vfilter");
-  vf.innerHTML = '<button class="vchip on" data-villa="all">Las 2 villas</button>' +
-    D.villas.map(v=>`<button class="vchip" data-villa="${v.id}">${esc(v.nombre.replace(/^Villa (Las )?/,""))}</button>`).join("");
+  D.leads=r[0].data||[]; D.reservas=r[1].data||[]; D.tx=r[2].data||[];
+  D.contactos=r[3].data||[]; D.tareas=r[4].data||[]; D.categorias=r[5].data||[];
+  D.pagos=(r[6].data||[]).filter(p=>D.reservas.some(rr=>rr.id===p.reserva));
+  D.plantillas=r[7].data||[]; D.temporadas=r[8].data||[];
+  if(!villa || !allowed.includes(villa)) villa = allowed[0]||null;
+  $("#vfilter").innerHTML = D.villas.map(v=>`<button class="vchip ${v.id===villa?"on":""}" data-villa="${v.id}">${esc(v.nombre.replace(/^Villa (Las )?/,""))}</button>`).join("");
 }
 async function reload(){ await loadAll(); render(); }
 
@@ -167,7 +175,7 @@ function vCalendario(){
   const dow=["L","M","X","J","V","S","D"];
   const off=(new Date(y,m,1).getDay()+6)%7;
   const days=new Date(y,m+1,0).getDate();
-  const vlist=villa==="all"?D.villas.map(v=>v.id):[villa];
+  const vlist=[villa];
   let cells="";
   for(let i=0;i<off;i++)cells+='<div class="cell out"></div>';
   for(let d=1;d<=days;d++){
@@ -198,7 +206,7 @@ function vFinanzas(){
   const byCat=tip=>{const map={};list.filter(t=>t.tipo===tip).forEach(t=>{const n=t.categoria?.nombre||"Sin categoría";map[n]=(map[n]||0)+ +t.monto;});return Object.entries(map).sort((a,b)=>b[1]-a[1]);};
   const incRows=byCat("ingreso").map(([c,a])=>`<tr><td class="cat">${esc(c)}</td><td class="pos">${cop(a)}</td></tr>`).join("")||`<tr><td class="cat" colspan="2">Sin ingresos aún</td></tr>`;
   const outRows=byCat("gasto").map(([c,a])=>`<tr><td class="cat">${esc(c)}</td><td class="neg">−${cop(a)}</td></tr>`).join("")||`<tr><td class="cat" colspan="2">Sin gastos aún</td></tr>`;
-  const socios=SOCIOS.map(s=>{
+  const socios=currentSocios().map(s=>{
     const aporte=fv(D.tx).filter(t=>t.pagado_por===s).reduce((a,b)=>a+ +b.monto,0);
     const retiro=fv(D.tx).filter(t=>t.recibido_por===s).reduce((a,b)=>a+ +b.monto,0);
     return {s,aporte,retiro,saldo:aporte-retiro};
@@ -399,13 +407,12 @@ function openAdd(kind){
     else if(q==="tarea")formTarea(); else if(q==="contacto")formContacto();}));
 }
 
-const socioOpts=sel=>'<option value="">— elegir —</option>'+SOCIOS.map(s=>`<option ${sel===s?"selected":""}>${esc(s)}</option>`).join("");
+const socioOpts=sel=>'<option value="">— elegir —</option>'+currentSocios().map(s=>`<option ${sel===s?"selected":""}>${esc(s)}</option>`).join("");
 function formTx(tipo, tx){
   tx=tx||{}; tipo=tx.tipo||tipo;
   const cats=D.categorias.filter(c=>c.tipo===tipo);
   const catSel=tx.categoria?.id||tx.categoria;
-  openSheet(`<h3>${tx.id?"Editar":"Nuevo"} ${tipo==="ingreso"?"ingreso":"gasto"}</h3>
-   <div class="field"><label>Villa</label><select id="f_villa">${villaOpts(tx.propiedad||(villa!=="all"?villa:null))}</select></div>
+  openSheet(`<h3>${tx.id?"Editar":"Nuevo"} ${tipo==="ingreso"?"ingreso":"gasto"} · ${esc(vname(villa))}</h3>
    <div class="field"><label>Categoría</label><select id="f_cat">${cats.map(c=>`<option value="${c.id}" ${catSel===c.id?"selected":""}>${esc(c.nombre)}</option>`).join("")}</select></div>
    <div class="field"><label>Concepto</label><input id="f_con" value="${esc(tx.concepto||"")}" placeholder="Descripción"></div>
    <div class="field"><label>Monto (COP)</label><input id="f_monto" type="number" inputmode="numeric" value="${esc(tx.monto||"")}" placeholder="0"></div>
@@ -418,7 +425,7 @@ function formTx(tipo, tx){
    ${tx.id?'<button class="btn ghost" id="f_del" style="margin-top:8px;color:var(--bad)">Eliminar movimiento</button>':""}`);
   $("#f_save").addEventListener("click",async()=>{
     const monto=+$("#f_monto").value; if(!monto)return toast("Indica el monto");
-    const row={propiedad:$("#f_villa").value,categoria:$("#f_cat").value,tipo,concepto:$("#f_con").value||null,monto,fecha:$("#f_fecha").value,pagado_por:$("#f_pp").value||null,recibido_por:$("#f_rp").value||null};
+    const row={propiedad:villa,categoria:$("#f_cat").value,tipo,concepto:$("#f_con").value||null,monto,fecha:$("#f_fecha").value,pagado_por:$("#f_pp").value||null,recibido_por:$("#f_rp").value||null};
     const {error}= tx.id ? await sb.from("transacciones").update(row).eq("id",tx.id) : await sb.from("transacciones").insert(row);
     if(error)return toast("Error: "+error.message);
     closeSheet();toast(tx.id?"Actualizado ✓":"Registrado ✓");await reload();
@@ -431,10 +438,9 @@ function formTx(tipo, tx){
   });
 }
 function formLead(){
-  openSheet(`<h3>Nueva solicitud</h3>
+  openSheet(`<h3>Nueva solicitud · ${esc(vname(villa))}</h3>
    <div class="field"><label>Nombre del cliente</label><input id="f_nom" placeholder="Nombre"></div>
    <div class="field"><label>Teléfono / WhatsApp</label><input id="f_tel" placeholder="+57…"></div>
-   <div class="field"><label>Villa</label><select id="f_villa">${villaOpts(villa!=="all"?villa:null)}</select></div>
    <div class="field"><label>Canal</label><select id="f_canal"><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="directo">Sitio web</option><option value="airbnb">Airbnb</option><option value="booking">Booking</option></select></div>
    <div class="field"><label>Huéspedes</label><input id="f_pax" type="number" inputmode="numeric"></div>
    <div class="field"><label>Valor estimado (COP)</label><input id="f_val" type="number" inputmode="numeric"></div>
@@ -443,7 +449,7 @@ function formLead(){
     const nom=$("#f_nom").value.trim(); if(!nom)return toast("Indica el nombre");
     const {data:c,error:e1}=await sb.from("contactos").insert({nombre:nom,telefono:$("#f_tel").value||null}).select().single();
     if(e1)return toast("Error: "+e1.message);
-    const {error}=await sb.from("leads").insert({contacto:c.id,propiedad:$("#f_villa").value,canal:$("#f_canal").value,huespedes:+$("#f_pax").value||null,valor_estimado:+$("#f_val").value||null,estado:"nuevo"});
+    const {error}=await sb.from("leads").insert({contacto:c.id,propiedad:villa,canal:$("#f_canal").value,huespedes:+$("#f_pax").value||null,valor_estimado:+$("#f_val").value||null,estado:"nuevo"});
     if(error)return toast("Error: "+error.message);
     closeSheet();toast("Solicitud creada ✓");await reload();
   });
@@ -463,8 +469,7 @@ function formContacto(){
   });
 }
 function formTarea(){
-  openSheet(`<h3>Nueva tarea</h3>
-   <div class="field"><label>Villa</label><select id="f_villa">${villaOpts(villa!=="all"?villa:null)}</select></div>
+  openSheet(`<h3>Nueva tarea · ${esc(vname(villa))}</h3>
    <div class="field"><label>Tipo</label><select id="f_tipo"><option value="limpieza">Limpieza</option><option value="mantenimiento">Mantenimiento</option><option value="check_in">Check-in</option><option value="check_out">Check-out</option></select></div>
    <div class="field"><label>Título</label><input id="f_tit" placeholder="Qué hay que hacer"></div>
    <div class="field"><label>Responsable</label><input id="f_resp" placeholder="Johana, Daniel, Ángel, Wendy…"></div>
@@ -472,17 +477,16 @@ function formTarea(){
    <button class="btn" id="f_save">Guardar</button>`);
   $("#f_save").addEventListener("click",async()=>{
     const tit=$("#f_tit").value.trim(); if(!tit)return toast("Indica el título");
-    const {error}=await sb.from("tareas").insert({propiedad:$("#f_villa").value,tipo:$("#f_tipo").value,titulo:tit,responsable:$("#f_resp").value||null,vence:$("#f_vence").value||null});
+    const {error}=await sb.from("tareas").insert({propiedad:villa,tipo:$("#f_tipo").value,titulo:tit,responsable:$("#f_resp").value||null,vence:$("#f_vence").value||null});
     if(error)return toast("Error: "+error.message);
     closeSheet();toast("Tarea creada ✓");await reload();
   });
 }
 function formReserva(pre){
-  pre=pre||{};
-  openSheet(`<h3>Nueva reserva</h3>
+  pre=pre||{}; const prop=pre.villa||villa;
+  openSheet(`<h3>Nueva reserva · ${esc(vname(prop))}</h3>
    <div class="field"><label>Cliente</label><input id="f_nom" value="${esc(pre.nombre||"")}" placeholder="Nombre del huésped"></div>
    <div class="field"><label>Teléfono</label><input id="f_tel" value="${esc(pre.tel||"")}" placeholder="+57…"></div>
-   <div class="field"><label>Villa</label><select id="f_villa">${villaOpts(pre.villa||(villa!=="all"?villa:null))}</select></div>
    <div class="field"><label>Canal</label><select id="f_canal">${["directo","whatsapp","instagram","airbnb","booking"].map(c=>`<option value="${c}" ${pre.canal===c?"selected":""}>${c==="directo"?"Sitio web/Directo":c[0].toUpperCase()+c.slice(1)}</option>`).join("")}</select></div>
    <div class="split2" style="margin-top:0"><div class="field"><label>Entrada</label><input id="f_in" type="date"></div><div class="field"><label>Salida</label><input id="f_out" type="date"></div></div>
    <div class="field"><label>Huéspedes</label><input id="f_pax" type="number" inputmode="numeric" value="${esc(pre.pax||"")}"></div>
@@ -495,8 +499,8 @@ function formReserva(pre){
     let cid=pre.contacto;
     if(cid){ if($("#f_tel").value) await sb.from("contactos").update({telefono:$("#f_tel").value}).eq("id",cid); }
     else { const {data:c}=await sb.from("contactos").insert({nombre:nom,telefono:$("#f_tel").value||null}).select().single(); cid=c?.id; }
-    const code=(D.villas.find(v=>v.id===$("#f_villa").value)?.slug||"R").slice(0,2).toUpperCase()+"-"+Date.now().toString().slice(-4);
-    const {error}=await sb.from("reservas").insert({codigo:code,contacto:cid,propiedad:$("#f_villa").value,canal:$("#f_canal").value,fecha_in:fin,fecha_out:fout,huespedes:+$("#f_pax").value||null,total:+$("#f_total").value||0,estado:"confirmada"});
+    const code=(villaSlug(prop)||"R").slice(0,2).toUpperCase()+"-"+Date.now().toString().slice(-4);
+    const {error}=await sb.from("reservas").insert({codigo:code,contacto:cid,propiedad:prop,canal:$("#f_canal").value,fecha_in:fin,fecha_out:fout,huespedes:+$("#f_pax").value||null,total:+$("#f_total").value||0,estado:"confirmada"});
     if(error)return toast("Error: "+error.message);
     if(pre.leadId) await sb.from("leads").update({estado:"reservado"}).eq("id",pre.leadId);
     closeSheet();toast("Reserva creada ✓");await reload();
