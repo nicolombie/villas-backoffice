@@ -248,7 +248,7 @@ function vCRM(){
   return `<div class="chips">${segs.map(s=>`<button class="chip ${crmSeg===s?"on":""}" data-seg="${esc(s)}">${esc(s)}</button>`).join("")}</div>
   <div class="card">${ list.length ? list.sort((a,b)=>val(b.id)-val(a.id)).map(c=>`
     <div class="li"><div class="ava2" style="background:var(--green)">${initials(c.nombre)}</div>
-    <div class="main"><b>${esc(c.nombre)}</b><small>${esc(c.pais||"")}${c.pais?" · ":""}${SEG[c.segmento]||""}${val(c.id)?" · "+copK(val(c.id)):""}</small></div>
+    <button class="main" data-contacto="${c.id}" style="text-align:left;background:none;border:0;padding:0"><b>${esc(c.nombre)}</b><small>${esc(c.pais||"")}${c.pais?" · ":""}${SEG[c.segmento]||""}${val(c.id)?" · "+copK(val(c.id)):""}</small></button>
     <div class="end">${c.telefono?`<a class="badge b-reservado" href="https://wa.me/${c.telefono.replace(/[^0-9]/g,"")}" target="_blank">WhatsApp</a>`:""}</div></div>`).join("")
     : emptyState("Sin clientes aún","Agrega contactos con el botón +.") }
   </div>`;
@@ -298,7 +298,7 @@ function vOps(){
   const list=fv(D.tareas);
   return `<div class="card">${ list.length ? list.map(t=>`
     <div class="li"><button class="ava2" data-task="${t.id}" data-done="${t.estado==='hecha'?1:0}" style="background:${t.estado==='hecha'?'#CFD8D2':vcolor(t.propiedad)};${t.estado==='hecha'?'color:#7A857F':''}">${t.estado==='hecha'?'✓':(t.tipo||'T')[0].toUpperCase()}</button>
-    <div class="main"><b style="${t.estado==='hecha'?'text-decoration:line-through;color:var(--soft)':''}">${esc(t.titulo)}</b><small>${esc(vname(t.propiedad))}${t.responsable?" · "+esc(t.responsable):""}${t.vence?" · vence "+fmtD(t.vence):""}</small></div>
+    <button class="main" data-taskedit="${t.id}" style="text-align:left;background:none;border:0;padding:0"><b style="${t.estado==='hecha'?'text-decoration:line-through;color:var(--soft)':''}">${esc(t.titulo)}</b><small>${esc(vname(t.propiedad))}${t.responsable?" · "+esc(t.responsable):""}${t.vence?" · vence "+fmtD(t.vence):""}</small></button>
     <div class="end"><span class="badge ${t.estado==='hecha'?'b-finalizada':'b-nuevo'}">${t.estado==='hecha'?'Hecho':'Pendiente'}</span></div></div>`).join("")
     : emptyState("Sin tareas","Agrega una con el botón +.") }
   </div>`;
@@ -366,6 +366,8 @@ $("#main").addEventListener("click",async e=>{
   const resv=e.target.closest("[data-reserva]"); if(resv){openReserva(resv.dataset.reserva);return;}
   const txb=e.target.closest("[data-tx]"); if(txb){const t=D.tx.find(x=>x.id===txb.dataset.tx); if(t)formTx(t.tipo,t); return;}
   const task=e.target.closest("[data-task]"); if(task){await toggleTask(task.dataset.task,task.dataset.done==="1");return;}
+  const tedit=e.target.closest("[data-taskedit]"); if(tedit){const t=D.tareas.find(x=>x.id===tedit.dataset.taskedit); if(t)formTarea(t); return;}
+  const cedit=e.target.closest("[data-contacto]"); if(cedit){const c=D.contactos.find(x=>x.id===cedit.dataset.contacto); if(c)formContacto(c); return;}
   const cal=e.target.closest("[data-cal]"); if(cal){calOff+=(+cal.dataset.cal);render();return;}
   if(e.target.closest("[data-syncical]")){return syncIcal();}
   if(e.target.closest("[data-savetar]")){return saveTarifas();}
@@ -451,73 +453,121 @@ function formTx(tipo, tx){
     closeSheet();toast("Eliminado");await reload();
   });
 }
-function formLead(){
-  openSheet(`<h3>Nueva solicitud · ${esc(vname(villa))}</h3>
-   <div class="field"><label>Nombre del cliente</label><input id="f_nom" placeholder="Nombre"></div>
-   <div class="field"><label>Teléfono / WhatsApp</label><input id="f_tel" placeholder="+57…"></div>
-   <div class="field"><label>Canal</label><select id="f_canal"><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="directo">Sitio web</option><option value="airbnb">Airbnb</option><option value="booking">Booking</option></select></div>
-   <div class="field"><label>Huéspedes</label><input id="f_pax" type="number" inputmode="numeric"></div>
-   <div class="field"><label>Valor estimado (COP)</label><input id="f_val" type="number" inputmode="numeric"></div>
-   <button class="btn" id="f_save">Guardar</button>`);
+function formLead(lead){
+  lead=lead||{}; const edit=!!lead.id;
+  const canalOps=[["whatsapp","WhatsApp"],["instagram","Instagram"],["directo","Sitio web"],["airbnb","Airbnb"],["booking","Booking"]];
+  openSheet(`<h3>${edit?"Editar":"Nueva"} solicitud · ${esc(vname(edit?lead.propiedad:villa))}</h3>
+   <div class="field"><label>Nombre del cliente</label><input id="f_nom" value="${esc(lead.cliente?.nombre||"")}" placeholder="Nombre"></div>
+   <div class="field"><label>Teléfono / WhatsApp</label><input id="f_tel" value="${esc(lead.cliente?.telefono||"")}" placeholder="+57…"></div>
+   <div class="field"><label>Canal</label><select id="f_canal">${canalOps.map(([k,v])=>`<option value="${k}" ${lead.canal===k?"selected":""}>${v}</option>`).join("")}</select></div>
+   <div class="field"><label>Huéspedes</label><input id="f_pax" type="number" inputmode="numeric" value="${esc(lead.huespedes||"")}"></div>
+   <div class="field"><label>Valor estimado (COP)</label><input id="f_val" type="number" inputmode="numeric" value="${esc(lead.valor_estimado||"")}"></div>
+   <button class="btn" id="f_save">${edit?"Guardar cambios":"Guardar"}</button>
+   ${edit?'<button class="btn ghost" id="f_del" style="margin-top:8px;color:var(--bad)">Eliminar solicitud</button>':""}`);
   $("#f_save").addEventListener("click",async()=>{
     const nom=$("#f_nom").value.trim(); if(!nom)return toast("Indica el nombre");
-    const {data:c,error:e1}=await sb.from("contactos").insert({nombre:nom,telefono:$("#f_tel").value||null}).select().single();
-    if(e1)return toast("Error: "+e1.message);
-    const {error}=await sb.from("leads").insert({contacto:c.id,propiedad:villa,canal:$("#f_canal").value,huespedes:+$("#f_pax").value||null,valor_estimado:+$("#f_val").value||null,estado:"nuevo"});
+    if(edit){
+      if(lead.contacto) await sb.from("contactos").update({nombre:nom,telefono:$("#f_tel").value||null}).eq("id",lead.contacto);
+      const {error}=await sb.from("leads").update({canal:$("#f_canal").value,huespedes:+$("#f_pax").value||null,valor_estimado:+$("#f_val").value||null}).eq("id",lead.id);
+      if(error)return toast("Error: "+error.message);
+      closeSheet();toast("Solicitud actualizada ✓");await reload();
+    } else {
+      const {data:c,error:e1}=await sb.from("contactos").insert({nombre:nom,telefono:$("#f_tel").value||null}).select().single();
+      if(e1)return toast("Error: "+e1.message);
+      const {error}=await sb.from("leads").insert({contacto:c.id,propiedad:villa,canal:$("#f_canal").value,huespedes:+$("#f_pax").value||null,valor_estimado:+$("#f_val").value||null,estado:"nuevo"});
+      if(error)return toast("Error: "+error.message);
+      closeSheet();toast("Solicitud creada ✓");await reload();
+    }
+  });
+  if(edit) $("#f_del").addEventListener("click",async()=>{
+    if(!confirm("¿Eliminar esta solicitud?"))return;
+    const {error}=await sb.from("leads").delete().eq("id",lead.id);
     if(error)return toast("Error: "+error.message);
-    closeSheet();toast("Solicitud creada ✓");await reload();
+    closeSheet();toast("Solicitud eliminada ✓");await reload();
   });
 }
-function formContacto(){
-  openSheet(`<h3>Nuevo cliente</h3>
-   <div class="field"><label>Nombre</label><input id="f_nom"></div>
-   <div class="field"><label>Teléfono / WhatsApp</label><input id="f_tel" placeholder="+57…"></div>
-   <div class="field"><label>País</label><input id="f_pais" placeholder="Colombia"></div>
-   <div class="field"><label>Segmento</label><select id="f_seg">${Object.entries(SEG).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div>
-   <button class="btn" id="f_save">Guardar</button>`);
+function formContacto(c){
+  c=c||{}; const edit=!!c.id;
+  openSheet(`<h3>${edit?"Editar":"Nuevo"} cliente</h3>
+   <div class="field"><label>Nombre</label><input id="f_nom" value="${esc(c.nombre||"")}"></div>
+   <div class="field"><label>Teléfono / WhatsApp</label><input id="f_tel" value="${esc(c.telefono||"")}" placeholder="+57…"></div>
+   <div class="field"><label>País</label><input id="f_pais" value="${esc(c.pais||"")}" placeholder="Colombia"></div>
+   <div class="field"><label>Segmento</label><select id="f_seg">${Object.entries(SEG).map(([k,v])=>`<option value="${k}" ${c.segmento===k?"selected":""}>${v}</option>`).join("")}</select></div>
+   <button class="btn" id="f_save">${edit?"Guardar cambios":"Guardar"}</button>
+   ${edit?'<button class="btn ghost" id="f_del" style="margin-top:8px;color:var(--bad)">Eliminar cliente</button>':""}`);
   $("#f_save").addEventListener("click",async()=>{
     const nom=$("#f_nom").value.trim(); if(!nom)return toast("Indica el nombre");
-    const {error}=await sb.from("contactos").insert({nombre:nom,telefono:$("#f_tel").value||null,pais:$("#f_pais").value||null,segmento:$("#f_seg").value});
+    const row={nombre:nom,telefono:$("#f_tel").value||null,pais:$("#f_pais").value||null,segmento:$("#f_seg").value};
+    let error;
+    if(edit){ ({error}=await sb.from("contactos").update(row).eq("id",c.id)); }
+    else { ({error}=await sb.from("contactos").insert(row)); }
     if(error)return toast("Error: "+error.message);
-    closeSheet();toast("Cliente creado ✓");await reload();
+    closeSheet();toast(edit?"Cliente actualizado ✓":"Cliente creado ✓");await reload();
+  });
+  if(edit) $("#f_del").addEventListener("click",async()=>{
+    if(!confirm("¿Eliminar este cliente?"))return;
+    const {error}=await sb.from("contactos").delete().eq("id",c.id);
+    if(error)return toast("Error: "+error.message+" (¿tiene reservas o solicitudes ligadas?)");
+    closeSheet();toast("Cliente eliminado ✓");await reload();
   });
 }
-function formTarea(){
-  openSheet(`<h3>Nueva tarea · ${esc(vname(villa))}</h3>
-   <div class="field"><label>Tipo</label><select id="f_tipo"><option value="limpieza">Limpieza</option><option value="mantenimiento">Mantenimiento</option><option value="check_in">Check-in</option><option value="check_out">Check-out</option></select></div>
-   <div class="field"><label>Título</label><input id="f_tit" placeholder="Qué hay que hacer"></div>
-   <div class="field"><label>Responsable</label><input id="f_resp" placeholder="Johana, Daniel, Ángel, Wendy…"></div>
-   <div class="field"><label>Vence</label><input id="f_vence" type="date"></div>
-   <button class="btn" id="f_save">Guardar</button>`);
+function formTarea(tarea){
+  tarea=tarea||{}; const edit=!!tarea.id;
+  const tipoOps=[["limpieza","Limpieza"],["mantenimiento","Mantenimiento"],["check_in","Check-in"],["check_out","Check-out"]];
+  openSheet(`<h3>${edit?"Editar":"Nueva"} tarea · ${esc(vname(edit?tarea.propiedad:villa))}</h3>
+   <div class="field"><label>Tipo</label><select id="f_tipo">${tipoOps.map(([k,v])=>`<option value="${k}" ${tarea.tipo===k?"selected":""}>${v}</option>`).join("")}</select></div>
+   <div class="field"><label>Título</label><input id="f_tit" value="${esc(tarea.titulo||"")}" placeholder="Qué hay que hacer"></div>
+   <div class="field"><label>Responsable</label><input id="f_resp" value="${esc(tarea.responsable||"")}" placeholder="Johana, Daniel, Ángel, Wendy…"></div>
+   <div class="field"><label>Vence</label><input id="f_vence" type="date" value="${esc(tarea.vence||"")}"></div>
+   <button class="btn" id="f_save">${edit?"Guardar cambios":"Guardar"}</button>
+   ${edit?'<button class="btn ghost" id="f_del" style="margin-top:8px;color:var(--bad)">Eliminar tarea</button>':""}`);
   $("#f_save").addEventListener("click",async()=>{
     const tit=$("#f_tit").value.trim(); if(!tit)return toast("Indica el título");
-    const {error}=await sb.from("tareas").insert({propiedad:villa,tipo:$("#f_tipo").value,titulo:tit,responsable:$("#f_resp").value||null,vence:$("#f_vence").value||null});
+    const row={tipo:$("#f_tipo").value,titulo:tit,responsable:$("#f_resp").value||null,vence:$("#f_vence").value||null};
+    let error;
+    if(edit){ ({error}=await sb.from("tareas").update(row).eq("id",tarea.id)); }
+    else { ({error}=await sb.from("tareas").insert({...row,propiedad:villa})); }
     if(error)return toast("Error: "+error.message);
-    closeSheet();toast("Tarea creada ✓");await reload();
+    closeSheet();toast(edit?"Tarea actualizada ✓":"Tarea creada ✓");await reload();
+  });
+  if(edit) $("#f_del").addEventListener("click",async()=>{
+    if(!confirm("¿Eliminar esta tarea?"))return;
+    const {error}=await sb.from("tareas").delete().eq("id",tarea.id);
+    if(error)return toast("Error: "+error.message);
+    closeSheet();toast("Tarea eliminada ✓");await reload();
   });
 }
 function formReserva(pre){
-  pre=pre||{}; const prop=pre.villa||villa;
-  openSheet(`<h3>Nueva reserva · ${esc(vname(prop))}</h3>
-   <div class="field"><label>Cliente</label><input id="f_nom" value="${esc(pre.nombre||"")}" placeholder="Nombre del huésped"></div>
-   <div class="field"><label>Teléfono</label><input id="f_tel" value="${esc(pre.tel||"")}" placeholder="+57…"></div>
+  pre=pre||{}; const prop=pre.villa||pre.propiedad||villa; const edit=!!pre.id;
+  openSheet(`<h3>${edit?"Editar":"Nueva"} reserva · ${esc(vname(prop))}</h3>
+   <div class="field"><label>Cliente</label><input id="f_nom" value="${esc(pre.nombre||pre.cliente?.nombre||"")}" placeholder="Nombre del huésped"></div>
+   <div class="field"><label>Teléfono</label><input id="f_tel" value="${esc(pre.tel||pre.cliente?.telefono||"")}" placeholder="+57…"></div>
    <div class="field"><label>Canal</label><select id="f_canal">${["directo","whatsapp","instagram","airbnb","booking"].map(c=>`<option value="${c}" ${pre.canal===c?"selected":""}>${c==="directo"?"Sitio web/Directo":c[0].toUpperCase()+c.slice(1)}</option>`).join("")}</select></div>
-   <div class="split2" style="margin-top:0"><div class="field"><label>Entrada</label><input id="f_in" type="date"></div><div class="field"><label>Salida</label><input id="f_out" type="date"></div></div>
-   <div class="field"><label>Huéspedes</label><input id="f_pax" type="number" inputmode="numeric" value="${esc(pre.pax||"")}"></div>
+   <div class="split2" style="margin-top:0"><div class="field"><label>Entrada</label><input id="f_in" type="date" value="${esc(pre.fecha_in||"")}"></div><div class="field"><label>Salida</label><input id="f_out" type="date" value="${esc(pre.fecha_out||"")}"></div></div>
+   <div class="field"><label>Huéspedes</label><input id="f_pax" type="number" inputmode="numeric" value="${esc(pre.pax||pre.huespedes||"")}"></div>
    <div class="field"><label>Total (COP)</label><input id="f_total" type="number" inputmode="numeric" value="${esc(pre.total||"")}"></div>
-   <button class="btn" id="f_save">Guardar</button>`);
+   <button class="btn" id="f_save">${edit?"Guardar cambios":"Guardar"}</button>
+   ${edit?'<button class="btn ghost" id="f_del" style="margin-top:8px;color:var(--bad)">Eliminar reserva</button>':""}`);
   $("#f_save").addEventListener("click",async()=>{
     const nom=$("#f_nom").value.trim(),fin=$("#f_in").value,fout=$("#f_out").value;
     if(!nom||!fin||!fout)return toast("Completa cliente y fechas");
     if(fout<=fin)return toast("La salida debe ser posterior");
     let cid=pre.contacto;
-    if(cid){ if($("#f_tel").value) await sb.from("contactos").update({telefono:$("#f_tel").value}).eq("id",cid); }
+    if(cid){ await sb.from("contactos").update({nombre:nom,telefono:$("#f_tel").value||null}).eq("id",cid); }
     else { const {data:c}=await sb.from("contactos").insert({nombre:nom,telefono:$("#f_tel").value||null}).select().single(); cid=c?.id; }
-    const code=(villaSlug(prop)||"R").slice(0,2).toUpperCase()+"-"+Date.now().toString().slice(-4);
-    const {error}=await sb.from("reservas").insert({codigo:code,contacto:cid,propiedad:prop,canal:$("#f_canal").value,fecha_in:fin,fecha_out:fout,huespedes:+$("#f_pax").value||null,total:+$("#f_total").value||0,estado:"confirmada"});
+    const row={contacto:cid,propiedad:prop,canal:$("#f_canal").value,fecha_in:fin,fecha_out:fout,huespedes:+$("#f_pax").value||null,total:+$("#f_total").value||0};
+    let error;
+    if(edit){ ({error}=await sb.from("reservas").update(row).eq("id",pre.id)); }
+    else { const code=(villaSlug(prop)||"R").slice(0,2).toUpperCase()+"-"+Date.now().toString().slice(-4); ({error}=await sb.from("reservas").insert({...row,codigo:code,estado:"confirmada"})); }
     if(error)return toast("Error: "+error.message);
     if(pre.leadId) await sb.from("leads").update({estado:"reservado"}).eq("id",pre.leadId);
-    closeSheet();toast("Reserva creada ✓");await reload();
+    closeSheet();toast(edit?"Reserva actualizada ✓":"Reserva creada ✓");await reload();
+  });
+  if(edit) $("#f_del").addEventListener("click",async()=>{
+    if(!confirm("¿Eliminar esta reserva? No se puede deshacer."))return;
+    const {error}=await sb.from("reservas").delete().eq("id",pre.id);
+    if(error)return toast("Error: "+error.message);
+    closeSheet();toast("Reserva eliminada ✓");await reload();
   });
 }
 function openLead(id){
@@ -525,7 +575,8 @@ function openLead(id){
   openSheet(`<h3>${esc(l.cliente?.nombre||"Solicitud")}</h3>
    <p class="muted" style="margin-bottom:14px">${esc(vname(l.propiedad))} · ${l.huespedes||"–"} pax · ${l.valor_estimado?cop(l.valor_estimado):"sin valor"} · ${chan(l.canal).replace(/<[^>]+>/g,"")}</p>
    <div class="field"><label>Estado del pipeline</label><select id="f_estado">${Object.entries(ST).map(([k,v])=>`<option value="${k}" ${l.estado===k?"selected":""}>${v}</option>`).join("")}</select></div>
-   <div class="split2" style="margin-top:0"><button class="btn" id="f_save">Actualizar</button><button class="btn ghost" id="f_conv">Convertir en reserva</button></div>
+   <div class="split2" style="margin-top:0"><button class="btn" id="f_save">Actualizar estado</button><button class="btn ghost" id="f_conv">Convertir en reserva</button></div>
+   <button class="btn ghost" id="f_edit" style="margin-top:8px">Editar datos de la solicitud</button>
    ${waBlock({phone:l.cliente?.telefono, nombre:l.cliente?.nombre, villaId:l.propiedad})}`);
   $("#f_save").addEventListener("click",async()=>{
     const {error}=await sb.from("leads").update({estado:$("#f_estado").value}).eq("id",id);
@@ -535,6 +586,7 @@ function openLead(id){
   $("#f_conv").addEventListener("click",()=>{
     formReserva({nombre:l.cliente?.nombre,tel:l.cliente?.telefono,contacto:l.contacto,villa:l.propiedad,canal:l.canal,pax:l.huespedes,total:l.valor_estimado,leadId:l.id});
   });
+  $("#f_edit").addEventListener("click",()=>formLead(l));
 }
 function openReserva(id){
   const r=D.reservas.find(x=>x.id===id); if(!r)return;
@@ -546,6 +598,7 @@ function openReserva(id){
     <div class="spread"><span class="muted">Saldo</span><b class="${saldo>0?'neg':'pos'}">${cop(saldo)}</b></div></div>
    <div class="field"><label>Estado</label><select id="f_estado">${Object.entries(RST).map(([k,v])=>`<option value="${k}" ${r.estado===k?"selected":""}>${v}</option>`).join("")}</select></div>
    <div class="split2" style="margin-top:0"><button class="btn" id="f_est">Guardar estado</button><button class="btn ghost" id="f_pago">Registrar pago</button></div>
+   <div class="split2" style="margin-top:8px"><button class="btn ghost" id="f_edit">Editar datos</button>${r.estado!=="cancelada"?'<button class="btn ghost" id="f_cancel" style="color:var(--bad)">Anular reserva</button>':""}</div>
    ${waBlock({phone:r.cliente?.telefono, nombre:r.cliente?.nombre, villaId:r.propiedad, fin:r.fecha_in, fout:r.fecha_out})}`);
   $("#f_est").addEventListener("click",async()=>{
     const {error}=await sb.from("reservas").update({estado:$("#f_estado").value}).eq("id",id);
@@ -553,6 +606,13 @@ function openReserva(id){
     closeSheet();toast("Actualizado ✓");await reload();
   });
   $("#f_pago").addEventListener("click",()=>formPago(r,saldo));
+  $("#f_edit").addEventListener("click",()=>formReserva({id:r.id,propiedad:r.propiedad,canal:r.canal,fecha_in:r.fecha_in,fecha_out:r.fecha_out,huespedes:r.huespedes,total:r.total,contacto:r.contacto,cliente:r.cliente}));
+  if($("#f_cancel")) $("#f_cancel").addEventListener("click",async()=>{
+    if(!confirm("¿Anular esta reserva? Quedará marcada como cancelada."))return;
+    const {error}=await sb.from("reservas").update({estado:"cancelada"}).eq("id",id);
+    if(error)return toast("Error: "+error.message);
+    closeSheet();toast("Reserva anulada ✓");await reload();
+  });
 }
 function formPago(r,saldo){
   openSheet(`<h3>Registrar pago</h3>
