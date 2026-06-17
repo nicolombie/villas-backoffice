@@ -15,6 +15,7 @@ const canalCatName = {airbnb:"Airbnb",booking:"Booking",whatsapp:"WhatsApp",inst
 let me=null, villa=null, cur="inicio";
 let D = {villas:[],leads:[],reservas:[],tx:[],contactos:[],tareas:[],categorias:[],pagos:[],plantillas:[],temporadas:[]};
 let leadFilter="todos", crmSeg="Todos";
+let pnlF={modo:"mes",mes:null,anio:null,desde:"",hasta:""};
 
 const cop = n => "$"+Math.round(+n||0).toLocaleString("es-CO");
 const copK = n => {n=+n||0; return Math.abs(n)>=1e6 ? "$"+(n/1e6).toFixed(1).replace(".0","")+"M" : "$"+Math.round(n/1000)+"k";};
@@ -117,6 +118,30 @@ async function reload(){ await loadAll(); render(); }
 /* ---------- helpers ---------- */
 function chan(c){const x=CH[c]||CH.otro; return `<span class="chan" style="background:${x.c}">${x.t}</span>`;}
 function monthTx(){ const {y,m}=thisMonth(); return fv(D.tx).filter(t=>{const d=new Date(t.fecha+"T00:00:00");return d.getFullYear()===y&&d.getMonth()===m;}); }
+function pnlRange(){
+  const now=new Date();
+  if(pnlF.modo==="mes"){ const ym=pnlF.mes||now.toISOString().slice(0,7); const [y,m]=ym.split("-").map(Number); const last=new Date(y,m,0).getDate();
+    return {desde:`${ym}-01`, hasta:`${ym}-${String(last).padStart(2,"0")}`, label:`${MONTHS[m-1]} ${y}`}; }
+  if(pnlF.modo==="anio"){ const y=pnlF.anio||now.getFullYear(); return {desde:`${y}-01-01`, hasta:`${y}-12-31`, label:`Año ${y}`}; }
+  const desde=pnlF.desde||"2000-01-01", hasta=pnlF.hasta||"2999-12-31";
+  return {desde, hasta, label:`${pnlF.desde?fmtD(desde):"…"} → ${pnlF.hasta?fmtD(hasta):"…"}`};
+}
+function pnlTx(){ const {desde,hasta}=pnlRange(); return fv(D.tx).filter(t=>t.fecha>=desde && t.fecha<=hasta); }
+function pnlFiltroUI(){
+  const now=new Date(), ym=pnlF.mes||now.toISOString().slice(0,7), curY=now.getFullYear();
+  const anios=[]; for(let y=2024;y<=curY+1;y++)anios.push(y);
+  const selA=pnlF.anio||curY;
+  return `<div class="card" style="margin-bottom:12px;padding:12px 16px">
+    <div class="chips" style="margin-bottom:8px">
+      <button class="chip ${pnlF.modo==="mes"?"on":""}" data-pmodo="mes">Mes</button>
+      <button class="chip ${pnlF.modo==="anio"?"on":""}" data-pmodo="anio">Año</button>
+      <button class="chip ${pnlF.modo==="rango"?"on":""}" data-pmodo="rango">Rango</button>
+    </div>
+    ${pnlF.modo==="mes"?`<input type="month" id="pmes" value="${ym}" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:9px">`:""}
+    ${pnlF.modo==="anio"?`<select id="panio" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:9px">${anios.map(y=>`<option value="${y}" ${y===selA?"selected":""}>${y}</option>`).join("")}</select>`:""}
+    ${pnlF.modo==="rango"?`<div class="split2" style="margin-top:0"><div class="field" style="margin:0"><label>Desde</label><input type="date" id="pdesde" value="${pnlF.desde}"></div><div class="field" style="margin:0"><label>Hasta</label><input type="date" id="phasta" value="${pnlF.hasta}"></div></div>`:""}
+  </div>`;
+}
 function pnl(list){ const inc=list.filter(t=>t.tipo==="ingreso").reduce((a,b)=>a+ +b.monto,0); const exp=list.filter(t=>t.tipo==="gasto").reduce((a,b)=>a+ +b.monto,0); return {inc,exp,res:inc-exp};}
 function emptyState(t,s){return `<div class="empty"><b>${t}</b>${s||""}</div>`;}
 const esIcal = r => r.origen && r.origen!=='manual';
@@ -124,22 +149,23 @@ const reservasManuales = () => fv(D.reservas).filter(r=>!esIcal(r));
 
 /* ---------- VIEWS ---------- */
 function vDash(){
-  const {inc,exp,res}=pnl(monthTx());
+  const {inc,exp,res}=pnl(pnlTx());
   const margin=inc?Math.round(res/inc*100):0;
+  const per=pnlRange().label;
   const nuevos=fv(D.leads).filter(l=>l.estado==="nuevo"||l.estado==="contactado").length;
   const activas=reservasManuales().filter(r=>r.estado==="confirmada"||r.estado==="en_curso").length;
   const next=reservasManuales().filter(r=>r.estado==="confirmada"||r.estado==="cotizacion").sort((a,b)=>a.fecha_in.localeCompare(b.fecha_in)).slice(0,4);
   const porCobrar=reservasManuales().filter(r=>r.estado==="confirmada"||r.estado==="en_curso").map(r=>({r,s:saldoDe(r)})).filter(x=>x.s>0);
   const totCobrar=porCobrar.reduce((a,b)=>a+b.s,0);
-  const {m}=thisMonth();
   return `
+  ${pnlFiltroUI()}
   <div class="kpis">
-    <div class="kpi"><div class="lab">Ingresos del mes</div><div class="val">${copK(inc)}</div><div class="delta muted">${MONTHS[m]}</div></div>
+    <div class="kpi"><div class="lab">Ingresos</div><div class="val">${copK(inc)}</div><div class="delta muted">${per}</div></div>
     <div class="kpi"><div class="lab">Resultado (P&L)</div><div class="val ${res>=0?'':'down'}">${copK(res)}</div><div class="delta ${res>=0?'up':'down'}">margen ${margin}%</div></div>
     <div class="kpi"><div class="lab">Solicitudes activas</div><div class="val">${nuevos}</div><div class="delta muted">por atender</div></div>
     <div class="kpi"><div class="lab">Reservas en curso</div><div class="val">${activas}</div><div class="delta muted">confirmadas</div></div>
   </div>
-  <div class="sec-t">P&L del mes</div>
+  <div class="sec-t">P&L · ${esc(per)}</div>
   <div class="card">
     <div class="spread"><b>Ingresos ${cop(inc)}</b><b class="${res>=0?'pos':'neg'}">${cop(res)}</b></div>
     <div class="pnl-bar"><i style="width:${inc?Math.min(100,exp/inc*100):0}%;background:var(--bad)"></i><i style="width:${inc&&res>0?res/inc*100:0}%;background:var(--ok)"></i></div>
@@ -358,6 +384,7 @@ $("#back").addEventListener("click",()=>go("mas"));
 $("#vfilter").addEventListener("click",e=>{const b=e.target.closest("[data-villa]");if(!b)return;villa=b.dataset.villa;document.querySelectorAll(".vchip").forEach(c=>c.classList.toggle("on",c===b));render();});
 $("#fab").addEventListener("click",()=>openAdd());
 $("#main").addEventListener("click",async e=>{
+  const pm=e.target.closest("[data-pmodo]"); if(pm){pnlF.modo=pm.dataset.pmodo;render();return;}
   const lf=e.target.closest("[data-lf]"); if(lf){leadFilter=lf.dataset.lf;render();return;}
   const sg=e.target.closest("[data-seg]"); if(sg){crmSeg=sg.dataset.seg;render();return;}
   const g=e.target.closest("[data-go]"); if(g){go(g.dataset.go);return;}
@@ -373,6 +400,15 @@ $("#main").addEventListener("click",async e=>{
   if(e.target.closest("[data-savetar]")){return saveTarifas();}
   if(e.target.closest("[data-saveical]")){return saveIcal();}
   if(e.target.id==="logout"){await sb.auth.signOut();}
+});
+
+/* ---------- Filtro P&L (cambios de fecha) ---------- */
+$("#main").addEventListener("change",e=>{
+  const t=e.target;
+  if(t.id==="pmes"){pnlF.mes=t.value;render();}
+  else if(t.id==="panio"){pnlF.anio=+t.value;render();}
+  else if(t.id==="pdesde"){pnlF.desde=t.value;render();}
+  else if(t.id==="phasta"){pnlF.hasta=t.value;render();}
 });
 
 /* ---------- SWIPE calendario ---------- */
