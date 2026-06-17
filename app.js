@@ -142,7 +142,9 @@ function pnlFiltroUI(){
     ${pnlF.modo==="rango"?`<div class="split2" style="margin-top:0"><div class="field" style="margin:0"><label>Desde</label><input type="date" id="pdesde" value="${pnlF.desde}"></div><div class="field" style="margin:0"><label>Hasta</label><input type="date" id="phasta" value="${pnlF.hasta}"></div></div>`:""}
   </div>`;
 }
-function pnl(list){ const inc=list.filter(t=>t.tipo==="ingreso").reduce((a,b)=>a+ +b.monto,0); const exp=list.filter(t=>t.tipo==="gasto").reduce((a,b)=>a+ +b.monto,0); return {inc,exp,res:inc-exp};}
+const CAT_SOCIOS="Préstamos y aportes";   // movimientos entre socios: cuentan en la cuenta de socios, NO en el P&L
+const enPnl=t=>t.categoria?.nombre!==CAT_SOCIOS;
+function pnl(list){ const l=list.filter(enPnl); const inc=l.filter(t=>t.tipo==="ingreso").reduce((a,b)=>a+ +b.monto,0); const exp=l.filter(t=>t.tipo==="gasto").reduce((a,b)=>a+ +b.monto,0); return {inc,exp,res:inc-exp};}
 function emptyState(t,s){return `<div class="empty"><b>${t}</b>${s||""}</div>`;}
 const esIcal = r => r.origen && r.origen!=='manual';
 const reservasManuales = () => fv(D.reservas).filter(r=>!esIcal(r));
@@ -231,7 +233,7 @@ function vCalendario(){
 
 function vFinanzas(){
   const list=monthTx(); const {inc,exp,res}=pnl(list); const {m}=thisMonth();
-  const byCat=tip=>{const map={};list.filter(t=>t.tipo===tip).forEach(t=>{const n=t.categoria?.nombre||"Sin categoría";map[n]=(map[n]||0)+ +t.monto;});return Object.entries(map).sort((a,b)=>b[1]-a[1]);};
+  const byCat=tip=>{const map={};list.filter(t=>t.tipo===tip&&enPnl(t)).forEach(t=>{const n=t.categoria?.nombre||"Sin categoría";map[n]=(map[n]||0)+ +t.monto;});return Object.entries(map).sort((a,b)=>b[1]-a[1]);};
   const incRows=byCat("ingreso").map(([c,a])=>`<tr><td class="cat">${esc(c)}</td><td class="pos">${cop(a)}</td></tr>`).join("")||`<tr><td class="cat" colspan="2">Sin ingresos aún</td></tr>`;
   const outRows=byCat("gasto").map(([c,a])=>`<tr><td class="cat">${esc(c)}</td><td class="neg">−${cop(a)}</td></tr>`).join("")||`<tr><td class="cat" colspan="2">Sin gastos aún</td></tr>`;
   const socios=currentSocios().map(s=>{
