@@ -9,6 +9,8 @@ const RST = {cotizacion:"Cotización",confirmada:"Confirmada",en_curso:"En curso
 const SEG = {familia_paisa:"Familia paisa",grupo_evento:"Grupo/Evento",nomada_digital:"Nómada digital",internacional:"Internacional",corporativo:"Corporativo",otro:"Otro"};
 const TEMP = {semana:"Entre semana",fin_de_semana:"Fin de semana",puente:"Puente festivo",temporada_alta:"Temporada alta"};
 const TPL = {confirmacion:"Confirmación",instrucciones:"Instrucciones de llegada",recordatorio:"Recordatorio check-out",resena:"Pedir reseña",seguimiento:"Seguimiento"};
+const SOCIOS = ["Nicolas","Soizic","Poup's inversiones"];
+const canalCatName = {airbnb:"Airbnb",booking:"Booking",whatsapp:"WhatsApp",instagram:"Instagram",directo:"Directo"};
 
 let me=null, villa="all", cur="inicio";
 let D = {villas:[],leads:[],reservas:[],tx:[],contactos:[],tareas:[],categorias:[],pagos:[],plantillas:[],temporadas:[]};
@@ -196,6 +198,12 @@ function vFinanzas(){
   const byCat=tip=>{const map={};list.filter(t=>t.tipo===tip).forEach(t=>{const n=t.categoria?.nombre||"Sin categoría";map[n]=(map[n]||0)+ +t.monto;});return Object.entries(map).sort((a,b)=>b[1]-a[1]);};
   const incRows=byCat("ingreso").map(([c,a])=>`<tr><td class="cat">${esc(c)}</td><td class="pos">${cop(a)}</td></tr>`).join("")||`<tr><td class="cat" colspan="2">Sin ingresos aún</td></tr>`;
   const outRows=byCat("gasto").map(([c,a])=>`<tr><td class="cat">${esc(c)}</td><td class="neg">−${cop(a)}</td></tr>`).join("")||`<tr><td class="cat" colspan="2">Sin gastos aún</td></tr>`;
+  const socios=SOCIOS.map(s=>{
+    const aporte=fv(D.tx).filter(t=>t.pagado_por===s).reduce((a,b)=>a+ +b.monto,0);
+    const retiro=fv(D.tx).filter(t=>t.recibido_por===s).reduce((a,b)=>a+ +b.monto,0);
+    return {s,aporte,retiro,saldo:aporte-retiro};
+  });
+  const movs=monthTx().slice().sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||""));
   return `<div class="cal-head"><span class="m">${MONTHS[m]} ${thisMonth().y}</span></div>
   <div class="kpis"><div class="kpi"><div class="lab">Ingresos</div><div class="val pos" style="font-size:1.25rem">${copK(inc)}</div></div>
   <div class="kpi"><div class="lab">Gastos</div><div class="val neg" style="font-size:1.25rem">${copK(exp)}</div></div></div>
@@ -206,7 +214,21 @@ function vFinanzas(){
     <tr class="tot"><td>Resultado</td><td class="${res>=0?'pos':'neg'}">${cop(res)}</td></tr>
     <tr><td class="cat">Margen neto</td><td>${inc?Math.round(res/inc*100):0}%</td></tr>
   </table></div>
-  <div class="split2"><button class="btn" data-add="ingreso">+ Ingreso</button><button class="btn ghost" data-add="gasto">+ Gasto</button></div>`;
+  <div class="split2"><button class="btn" data-add="ingreso">+ Ingreso</button><button class="btn ghost" data-add="gasto">+ Gasto</button></div>
+  <div class="sec-t">Cuenta de socios (saldo acumulado)</div>
+  <div class="card">${socios.map(b=>`
+    <div class="li"><div class="ava2" style="background:var(--green)">${initials(b.s)}</div>
+    <div class="main"><b>${esc(b.s)}</b><small>aportó ${copK(b.aporte)} · recibió ${copK(b.retiro)}</small></div>
+    <div class="end"><b class="${b.saldo>=0?'pos':'neg'}">${b.saldo>0?'+':''}${copK(b.saldo)}</b><small>${b.saldo>0?'le deben':(b.saldo<0?'debe':'al día')}</small></div></div>`).join("")}
+    <p class="muted" style="margin-top:8px;font-size:.74rem">Saldo + = la operación le debe (adelantó dinero). − = tiene dinero de la operación.</p>
+  </div>
+  <div class="sec-t">Movimientos del mes</div>
+  <div class="card">${ movs.length ? movs.map(t=>`
+    <button class="li" style="width:100%;text-align:left" data-tx="${t.id}"><div class="ava2" style="background:${t.tipo==='ingreso'?'var(--ok)':'var(--bad)'};font-size:1.1rem">${t.tipo==='ingreso'?'+':'−'}</div>
+    <div class="main"><b>${esc(t.concepto||t.categoria?.nombre||'Movimiento')}</b><small>${esc(t.categoria?.nombre||'')}${t.pagado_por?' · pagó '+esc(t.pagado_por):''}${t.recibido_por?' · recibió '+esc(t.recibido_por):''}</small></div>
+    <div class="end"><b class="${t.tipo==='ingreso'?'pos':'neg'}">${t.tipo==='ingreso'?'':'−'}${copK(t.monto)}</b><small>${fmtD(t.fecha)}</small></div></button>`).join("")
+    : emptyState("Sin movimientos este mes","") }
+  </div>`;
 }
 
 function vCRM(){
@@ -331,6 +353,7 @@ $("#main").addEventListener("click",async e=>{
   const add=e.target.closest("[data-add]"); if(add){openAdd(add.dataset.add);return;}
   const lead=e.target.closest("[data-lead]"); if(lead){openLead(lead.dataset.lead);return;}
   const resv=e.target.closest("[data-reserva]"); if(resv){openReserva(resv.dataset.reserva);return;}
+  const txb=e.target.closest("[data-tx]"); if(txb){const t=D.tx.find(x=>x.id===txb.dataset.tx); if(t)formTx(t.tipo,t); return;}
   const task=e.target.closest("[data-task]"); if(task){await toggleTask(task.dataset.task,task.dataset.done==="1");return;}
   if(e.target.closest("[data-savetar]")){return saveTarifas();}
   if(e.target.closest("[data-saveical]")){return saveIcal();}
@@ -376,20 +399,35 @@ function openAdd(kind){
     else if(q==="tarea")formTarea(); else if(q==="contacto")formContacto();}));
 }
 
-function formTx(tipo){
+const socioOpts=sel=>'<option value="">— elegir —</option>'+SOCIOS.map(s=>`<option ${sel===s?"selected":""}>${esc(s)}</option>`).join("");
+function formTx(tipo, tx){
+  tx=tx||{}; tipo=tx.tipo||tipo;
   const cats=D.categorias.filter(c=>c.tipo===tipo);
-  openSheet(`<h3>${tipo==="ingreso"?"Nuevo ingreso":"Nuevo gasto"}</h3>
-   <div class="field"><label>Villa</label><select id="f_villa">${villaOpts(villa!=="all"?villa:null)}</select></div>
-   <div class="field"><label>Categoría</label><select id="f_cat">${cats.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join("")}</select></div>
-   <div class="field"><label>Concepto</label><input id="f_con" placeholder="Descripción"></div>
-   <div class="field"><label>Monto (COP)</label><input id="f_monto" type="number" inputmode="numeric" placeholder="0"></div>
-   <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-   <button class="btn" id="f_save">Guardar</button>`);
+  const catSel=tx.categoria?.id||tx.categoria;
+  openSheet(`<h3>${tx.id?"Editar":"Nuevo"} ${tipo==="ingreso"?"ingreso":"gasto"}</h3>
+   <div class="field"><label>Villa</label><select id="f_villa">${villaOpts(tx.propiedad||(villa!=="all"?villa:null))}</select></div>
+   <div class="field"><label>Categoría</label><select id="f_cat">${cats.map(c=>`<option value="${c.id}" ${catSel===c.id?"selected":""}>${esc(c.nombre)}</option>`).join("")}</select></div>
+   <div class="field"><label>Concepto</label><input id="f_con" value="${esc(tx.concepto||"")}" placeholder="Descripción"></div>
+   <div class="field"><label>Monto (COP)</label><input id="f_monto" type="number" inputmode="numeric" value="${esc(tx.monto||"")}" placeholder="0"></div>
+   <div class="split2" style="margin-top:0">
+     <div class="field"><label>${tipo==="gasto"?"¿Quién pagó?":"¿Quién aportó?"}</label><select id="f_pp">${socioOpts(tx.pagado_por)}</select></div>
+     <div class="field"><label>¿Quién recibió?</label><select id="f_rp">${socioOpts(tx.recibido_por)}</select></div>
+   </div>
+   <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${tx.fecha||new Date().toISOString().slice(0,10)}"></div>
+   <button class="btn" id="f_save">${tx.id?"Guardar cambios":"Guardar"}</button>
+   ${tx.id?'<button class="btn ghost" id="f_del" style="margin-top:8px;color:var(--bad)">Eliminar movimiento</button>':""}`);
   $("#f_save").addEventListener("click",async()=>{
     const monto=+$("#f_monto").value; if(!monto)return toast("Indica el monto");
-    const {error}=await sb.from("transacciones").insert({propiedad:$("#f_villa").value,categoria:$("#f_cat").value,tipo,concepto:$("#f_con").value||null,monto,fecha:$("#f_fecha").value});
+    const row={propiedad:$("#f_villa").value,categoria:$("#f_cat").value,tipo,concepto:$("#f_con").value||null,monto,fecha:$("#f_fecha").value,pagado_por:$("#f_pp").value||null,recibido_por:$("#f_rp").value||null};
+    const {error}= tx.id ? await sb.from("transacciones").update(row).eq("id",tx.id) : await sb.from("transacciones").insert(row);
     if(error)return toast("Error: "+error.message);
-    closeSheet();toast("Registrado ✓");await reload();
+    closeSheet();toast(tx.id?"Actualizado ✓":"Registrado ✓");await reload();
+  });
+  if(tx.id) $("#f_del").addEventListener("click",async()=>{
+    if(!confirm("¿Eliminar este movimiento?"))return;
+    const {error}=await sb.from("transacciones").delete().eq("id",tx.id);
+    if(error)return toast("Error: "+error.message);
+    closeSheet();toast("Eliminado");await reload();
   });
 }
 function formLead(){
@@ -503,15 +541,17 @@ function formPago(r,saldo){
    <p class="muted" style="margin-bottom:12px">${esc(r.cliente?.nombre||r.codigo)} · saldo ${cop(saldo)}</p>
    <div class="field"><label>Concepto</label><select id="f_con"><option value="anticipo">Anticipo</option><option value="saldo">Saldo</option><option value="otro">Otro</option></select></div>
    <div class="field"><label>Método</label><select id="f_met"><option>Bancolombia</option><option>Nequi</option><option>Efectivo</option><option>Tarjeta</option></select></div>
+   <div class="field"><label>¿Quién recibió el dinero?</label><select id="f_rp">${socioOpts()}</select></div>
    <div class="field"><label>Monto (COP)</label><input id="f_monto" type="number" inputmode="numeric" value="${saldo>0?Math.round(saldo):''}"></div>
    <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
    <button class="btn" id="f_save">Guardar pago</button>`);
   $("#f_save").addEventListener("click",async()=>{
     const monto=+$("#f_monto").value; if(!monto)return toast("Indica el monto");
-    const {error}=await sb.from("pagos").insert({reserva:r.id,concepto:$("#f_con").value,metodo:$("#f_met").value,monto,fecha:$("#f_fecha").value});
+    const f=$("#f_fecha").value, rp=$("#f_rp").value||null;
+    const {error}=await sb.from("pagos").insert({reserva:r.id,concepto:$("#f_con").value,metodo:$("#f_met").value,monto,fecha:f});
     if(error)return toast("Error: "+error.message);
-    // registrar también como ingreso para el P&L
-    await sb.from("transacciones").insert({propiedad:r.propiedad,reserva:r.id,tipo:"ingreso",concepto:"Pago "+(r.codigo||""),monto,fecha:$("#f_fecha").value});
+    const catId=(D.categorias.find(c=>c.tipo==="ingreso"&&c.nombre===(canalCatName[r.canal]||"Directo"))||{}).id||null;
+    await sb.from("transacciones").insert({propiedad:r.propiedad,reserva:r.id,tipo:"ingreso",categoria:catId,concepto:"Pago "+(r.codigo||""),monto,fecha:f,recibido_por:rp});
     closeSheet();toast("Pago registrado ✓");await reload();
   });
 }
