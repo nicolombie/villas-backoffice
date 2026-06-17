@@ -29,6 +29,8 @@ const $ = s => document.querySelector(s);
 const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),2200);}
 function thisMonth(){const d=new Date();return {y:d.getFullYear(),m:d.getMonth()};}
+let calOff=0;
+function calYM(){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()+calOff);return{y:d.getFullYear(),m:d.getMonth()};}
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 function fmtD(s){ if(!s) return "—"; const d=new Date(s+"T00:00:00"); return d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3); }
 const pagosDe = rid => D.pagos.filter(p=>p.reserva===rid);
@@ -117,15 +119,17 @@ function chan(c){const x=CH[c]||CH.otro; return `<span class="chan" style="backg
 function monthTx(){ const {y,m}=thisMonth(); return fv(D.tx).filter(t=>{const d=new Date(t.fecha+"T00:00:00");return d.getFullYear()===y&&d.getMonth()===m;}); }
 function pnl(list){ const inc=list.filter(t=>t.tipo==="ingreso").reduce((a,b)=>a+ +b.monto,0); const exp=list.filter(t=>t.tipo==="gasto").reduce((a,b)=>a+ +b.monto,0); return {inc,exp,res:inc-exp};}
 function emptyState(t,s){return `<div class="empty"><b>${t}</b>${s||""}</div>`;}
+const esIcal = r => r.origen && r.origen!=='manual';
+const reservasManuales = () => fv(D.reservas).filter(r=>!esIcal(r));
 
 /* ---------- VIEWS ---------- */
 function vDash(){
   const {inc,exp,res}=pnl(monthTx());
   const margin=inc?Math.round(res/inc*100):0;
   const nuevos=fv(D.leads).filter(l=>l.estado==="nuevo"||l.estado==="contactado").length;
-  const activas=fv(D.reservas).filter(r=>r.estado==="confirmada"||r.estado==="en_curso").length;
-  const next=fv(D.reservas).filter(r=>r.estado==="confirmada"||r.estado==="cotizacion").sort((a,b)=>a.fecha_in.localeCompare(b.fecha_in)).slice(0,4);
-  const porCobrar=fv(D.reservas).filter(r=>r.estado==="confirmada"||r.estado==="en_curso").map(r=>({r,s:saldoDe(r)})).filter(x=>x.s>0);
+  const activas=reservasManuales().filter(r=>r.estado==="confirmada"||r.estado==="en_curso").length;
+  const next=reservasManuales().filter(r=>r.estado==="confirmada"||r.estado==="cotizacion").sort((a,b)=>a.fecha_in.localeCompare(b.fecha_in)).slice(0,4);
+  const porCobrar=reservasManuales().filter(r=>r.estado==="confirmada"||r.estado==="en_curso").map(r=>({r,s:saldoDe(r)})).filter(x=>x.s>0);
   const totCobrar=porCobrar.reduce((a,b)=>a+b.s,0);
   const {m}=thisMonth();
   return `
@@ -171,34 +175,32 @@ function vBandeja(){
 }
 
 function vCalendario(){
-  const {y,m}=thisMonth();
+  const {y,m}=calYM();
+  const hoy=new Date().toISOString().slice(0,10);
   const dow=["L","M","X","J","V","S","D"];
   const off=(new Date(y,m,1).getDay()+6)%7;
   const days=new Date(y,m+1,0).getDate();
-  const vlist=[villa];
   let cells="";
   for(let i=0;i<off;i++)cells+='<div class="cell out"></div>';
   for(let d=1;d<=days;d++){
     const ds=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    let bars="";
-    vlist.forEach((vid,idx)=>{
-      const r=D.reservas.find(x=>x.propiedad===vid && x.estado!=="cancelada" && x.fecha_in<=ds && x.fecha_out>ds);
-      if(r)bars+=`<div class="bk" style="background:${CH[r.canal]?.c||'var(--green)'};bottom:${3+idx*7}px"></div>`;
-    });
-    cells+=`<div class="cell"><span class="d">${d}</span>${bars}</div>`;
+    const r=D.reservas.find(x=>x.propiedad===villa && x.estado!=="cancelada" && x.fecha_in<=ds && x.fecha_out>ds);
+    const bars=r?`<div class="bk" style="background:${CH[r.canal]?.c||'var(--green)'};bottom:3px"></div>`:"";
+    cells+=`<div class="cell${ds===hoy?' today':''}"><span class="d">${d}</span>${bars}</div>`;
   }
-  const ag=fv(D.reservas).filter(r=>r.estado!=="finalizada"&&r.estado!=="cancelada").sort((a,b)=>a.fecha_in.localeCompare(b.fecha_in)).slice(0,5);
-  return `<div class="cal-head"><span class="m">${MONTHS[m]} ${y}</span></div>
-  <div class="cal-grid">${dow.map(d=>`<div class="dow">${d}</div>`).join("")}${cells}</div>
+  const ag=fv(D.reservas).filter(r=>r.estado!=="finalizada"&&r.estado!=="cancelada"&&r.fecha_out>=hoy).sort((a,b)=>a.fecha_in.localeCompare(b.fecha_in)).slice(0,8);
+  const nombreRes=r=>r.cliente?.nombre || (esIcal(r)?((CH[r.canal]?.t||"")+" · "+(r.notas||"Ocupado")):(r.codigo||"Reserva"));
+  return `<div class="cal-head"><button class="calnav" data-cal="-1" aria-label="Mes anterior">‹</button><span class="m">${MONTHS[m]} ${y}</span><button class="calnav" data-cal="1" aria-label="Mes siguiente">›</button></div>
+  <div class="cal-grid" id="calGrid">${dow.map(d=>`<div class="dow">${d}</div>`).join("")}${cells}</div>
   <div class="legend" style="margin-top:14px"><span><i class="dot" style="background:var(--ab)"></i>Airbnb</span><span><i class="dot" style="background:var(--bk)"></i>Booking</span><span><i class="dot" style="background:var(--wa)"></i>WhatsApp</span><span><i class="dot" style="background:var(--web)"></i>Directo</span></div>
   <div class="sec-t">Agenda</div>
-  <div class="card">${ ag.length ? ag.map(r=>`
-    <button class="li" style="width:100%;text-align:left" data-reserva="${r.id}"><div class="ava2" style="background:${vcolor(r.propiedad)}">${(CH[r.canal]||CH.otro).t}</div>
-    <div class="main"><b>${esc(r.cliente?.nombre||r.codigo||"Reserva")}</b><small>${esc(vname(r.propiedad))}</small></div>
-    <div class="end"><b>${fmtD(r.fecha_in)}→${fmtD(r.fecha_out)}</b><small><span class="badge b-${r.estado}">${RST[r.estado]}</span></small></div></button>`).join("")
+  <div class="card">${ ag.length ? ag.map(r=>{
+    const tag=esIcal(r)?'div':'button';
+    return `<${tag} class="li" style="width:100%;text-align:left" ${esIcal(r)?'':`data-reserva="${r.id}"`}><div class="ava2" style="background:${vcolor(r.propiedad)}">${(CH[r.canal]||CH.otro).t}</div>
+    <div class="main"><b>${esc(nombreRes(r))}</b><small>${esc(vname(r.propiedad))}${esIcal(r)?' · sincronizado':''}</small></div>
+    <div class="end"><b>${fmtD(r.fecha_in)}→${fmtD(r.fecha_out)}</b><small>${esIcal(r)?`<span class="badge b-reservado">Ocupado</span>`:`<span class="badge b-${r.estado}">${RST[r.estado]}</span>`}</small></div></${tag}>`;}).join("")
     : emptyState("Sin reservas próximas","") }
-  </div>
-  <div class="card" style="background:#FFF7E8;border-color:#F0DFB6"><small class="muted" style="color:#8A6516">◆ Pega los enlaces iCal de Airbnb y Booking en Ajustes para sincronizar y evitar sobre-reservas.</small></div>`;
+  </div>`;
 }
 
 function vFinanzas(){
@@ -253,7 +255,7 @@ function vCRM(){
 }
 
 function vReservas(){
-  const list=fv(D.reservas);
+  const list=reservasManuales();
   return `<div class="card">${ list.length ? list.map(r=>{const s=saldoDe(r);return `
     <button class="li" style="width:100%;text-align:left" data-reserva="${r.id}"><div class="ava2" style="background:${vcolor(r.propiedad)}">${esc((r.codigo||"R").slice(0,2))}</div>
     <div class="main"><b>${esc(r.cliente?.nombre||r.codigo||"Reserva")}</b><small>${esc(vname(r.propiedad))} · ${fmtD(r.fecha_in)}→${fmtD(r.fecha_out)}</small>
@@ -269,7 +271,7 @@ function donut(parts){
   return `<svg width="120" height="120" viewBox="0 0 120 120">${segs}</svg>`;
 }
 function vStats(){
-  const res=fv(D.reservas).filter(r=>r.estado!=="cancelada");
+  const res=reservasManuales().filter(r=>r.estado!=="cancelada");
   const nights=res.reduce((a,b)=>a+(new Date(b.fecha_out)-new Date(b.fecha_in))/864e5,0);
   const rev=res.reduce((a,b)=>a+ +b.total,0);
   const adr=nights?rev/nights:0;
@@ -328,7 +330,8 @@ function vAjustes(){
   ${D.villas.map(v=>`<div class="card"><h3 style="font-size:.95rem;margin-bottom:8px">${esc(v.nombre)}</h3>
     <div class="field"><label>iCal Airbnb</label><input class="icalin" data-vid="${v.id}" data-k="ical_airbnb" placeholder="https://www.airbnb.com/calendar/ical/..." value="${esc(v.ical_airbnb||"")}"></div>
     <div class="field"><label>iCal Booking</label><input class="icalin" data-vid="${v.id}" data-k="ical_booking" placeholder="https://admin.booking.com/...ical" value="${esc(v.ical_booking||"")}"></div></div>`).join("")}
-  <button class="btn ghost" data-saveical="1">Guardar enlaces iCal</button>
+  <div class="split2"><button class="btn" data-saveical="1">Guardar enlaces</button><button class="btn ghost" data-syncical="1">Sincronizar ahora</button></div>
+  <p class="muted" style="font-size:.74rem;margin-top:6px">Los calendarios se actualizan solos cada 2 horas. Las fechas ocupadas en Airbnb/Booking aparecen en el calendario para evitar sobre-reservas.</p>
   <div class="card" style="margin-top:14px"><h3 style="font-size:1rem;margin-bottom:6px">Tu equipo</h3><p class="muted">Nicolas (propietario), Pauline y Soizic (admin).</p></div>`;
 }
 
@@ -363,10 +366,21 @@ $("#main").addEventListener("click",async e=>{
   const resv=e.target.closest("[data-reserva]"); if(resv){openReserva(resv.dataset.reserva);return;}
   const txb=e.target.closest("[data-tx]"); if(txb){const t=D.tx.find(x=>x.id===txb.dataset.tx); if(t)formTx(t.tipo,t); return;}
   const task=e.target.closest("[data-task]"); if(task){await toggleTask(task.dataset.task,task.dataset.done==="1");return;}
+  const cal=e.target.closest("[data-cal]"); if(cal){calOff+=(+cal.dataset.cal);render();return;}
+  if(e.target.closest("[data-syncical]")){return syncIcal();}
   if(e.target.closest("[data-savetar]")){return saveTarifas();}
   if(e.target.closest("[data-saveical]")){return saveIcal();}
   if(e.target.id==="logout"){await sb.auth.signOut();}
 });
+
+/* ---------- SWIPE calendario ---------- */
+let _tx0=0,_ty0=0;
+$("#main").addEventListener("touchstart",e=>{if(cur!=="calendario")return;_tx0=e.changedTouches[0].clientX;_ty0=e.changedTouches[0].clientY;},{passive:true});
+$("#main").addEventListener("touchend",e=>{
+  if(cur!=="calendario")return;
+  const dx=e.changedTouches[0].clientX-_tx0, dy=e.changedTouches[0].clientY-_ty0;
+  if(Math.abs(dx)>50 && Math.abs(dx)>Math.abs(dy)*1.5){ calOff+=(dx<0?1:-1); render(); }
+},{passive:true});
 
 /* ---------- SHEET ---------- */
 const sheetBg=$("#sheetBg"), sheet=$("#sheet");
@@ -575,6 +589,15 @@ async function saveIcal(){
   inputs.forEach(i=>{byV[i.dataset.vid]=byV[i.dataset.vid]||{}; byV[i.dataset.vid][i.dataset.k]=i.value||null;});
   for(const vid in byV){ await sb.from("propiedades").update(byV[vid]).eq("id",vid); }
   toast("Enlaces guardados ✓"); await reload();
+  syncIcal();
+}
+async function syncIcal(){
+  toast("Sincronizando calendarios…");
+  const {data,error}=await sb.rpc("sync_ical");
+  if(error){ toast("Sync automático activo (cada 2 h)"); return; }
+  const n=(data&&data.eventos)||0;
+  toast(n?`${n} fechas sincronizadas ✓`:"Sin fechas ocupadas");
+  await reload();
 }
 
 boot();
